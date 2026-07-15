@@ -1,0 +1,28 @@
+experiment,model,evaluation_scope,accuracy,balanced_accuracy,roc_auc,brier_score,n_test
+Baseline,Always-Blue,full_test,0.4432,0.5,,,1645
+Baseline,Always-Red,full_test,0.5568,0.5,,,1645
+Baseline,Odds-Favorite,odds_available_test,0.6941,0.6871,0.7576,0.1991,1412
+"MODEL A2: OSNOVNE DIF ZNACAJKE, BEZ ODDS, CORNER AUGMENTATION",HistGradientBoosting,full_test_augmented_train,0.6419,0.6394,0.6817,0.2258,1645
+"MODEL A2: OSNOVNE DIF ZNACAJKE, BEZ ODDS, CORNER AUGMENTATION",Logistic Regression,full_test_augmented_train,0.6377,0.6343,0.6806,0.2256,1645
+"MODEL A2: OSNOVNE DIF ZNACAJKE, BEZ ODDS, CORNER AUGMENTATION",Random Forest,full_test_augmented_train,0.6559,0.652,0.6987,0.2237,1645
+"MODEL A2: OSNOVNE DIF ZNACAJKE, BEZ ODDS, CORNER AUGMENTATION",HistGradientBoosting,odds_available_test_augmented_train,0.6473,0.6452,0.6901,0.224,1412
+"MODEL A2: OSNOVNE DIF ZNACAJKE, BEZ ODDS, CORNER AUGMENTATION",Logistic Regression,odds_available_test_augmented_train,0.6445,0.6416,0.6907,0.2233,1412
+"MODEL A2: OSNOVNE DIF ZNACAJKE, BEZ ODDS, CORNER AUGMENTATION",Random Forest,odds_available_test_augmented_train,0.6615,0.6582,0.7082,0.2219,1412
+"MODEL A: OSNOVNE DIF ZNAČAJKE, BEZ ODDS",HistGradientBoosting,full_test,0.6207,0.6031,0.6563,0.233,1645
+"MODEL A: OSNOVNE DIF ZNAČAJKE, BEZ ODDS",Logistic Regression,full_test,0.6298,0.6036,0.6892,0.2228,1645
+"MODEL A: OSNOVNE DIF ZNAČAJKE, BEZ ODDS",Random Forest,full_test,0.6523,0.6507,0.6992,0.2236,1645
+"MODEL A: OSNOVNE DIF ZNAČAJKE, BEZ ODDS",HistGradientBoosting,odds_available_test,0.6261,0.609,0.6657,0.2299,1412
+"MODEL A: OSNOVNE DIF ZNAČAJKE, BEZ ODDS",Logistic Regression,odds_available_test,0.6409,0.6157,0.7018,0.2197,1412
+"MODEL A: OSNOVNE DIF ZNAČAJKE, BEZ ODDS",Random Forest,odds_available_test,0.6608,0.6598,0.7113,0.2213,1412
+MODEL B: DIF ZNAČAJKE + R_ODDS + B_ODDS (bez EV),HistGradientBoosting,full_test,0.665,0.6541,0.7153,0.2164,1645
+MODEL B: DIF ZNAČAJKE + R_ODDS + B_ODDS (bez EV),Logistic Regression,full_test,0.6845,0.6685,0.7437,0.2037,1645
+MODEL B: DIF ZNAČAJKE + R_ODDS + B_ODDS (bez EV),Random Forest,full_test,0.6663,0.6688,0.742,0.2066,1645
+MODEL B: DIF ZNAČAJKE + R_ODDS + B_ODDS (bez EV),HistGradientBoosting,odds_available_test,0.6742,0.6632,0.7301,0.2118,1412
+MODEL B: DIF ZNAČAJKE + R_ODDS + B_ODDS (bez EV),Logistic Regression,odds_available_test,0.704,0.6943,0.7618,0.1966,1412
+MODEL B: DIF ZNAČAJKE + R_ODDS + B_ODDS (bez EV),Random Forest,odds_available_test,0.6834,0.6861,0.7601,0.2003,1412
+MODEL C: DIF ZNAČAJKE + ODDS + EV,HistGradientBoosting,full_test,0.6699,0.6581,0.7165,0.216,1645
+MODEL C: DIF ZNAČAJKE + ODDS + EV,Logistic Regression,full_test,0.6894,0.6725,0.7446,0.2031,1645
+MODEL C: DIF ZNAČAJKE + ODDS + EV,Random Forest,full_test,0.6669,0.6691,0.7413,0.2064,1645
+MODEL C: DIF ZNAČAJKE + ODDS + EV,HistGradientBoosting,odds_available_test,0.6771,0.6654,0.7321,0.211,1412
+MODEL C: DIF ZNAČAJKE + ODDS + EV,Logistic Regression,odds_available_test,0.7096,0.6982,0.7623,0.197,1412
+MODEL C: DIF ZNAČAJKE + ODDS + EV,Random Forest,odds_available_test,0.682,0.6846,0.7603,0.1999,1412

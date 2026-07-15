@@ -1,0 +1,11 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Generated model artifacts (recreate with: python zavrsni.py)
+*.pkl
+
+# Generated intermediate dataset
+ufc_model_dataset.csv
