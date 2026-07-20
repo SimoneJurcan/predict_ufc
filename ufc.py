@@ -39,6 +39,13 @@ SPLIT_DATE = pd.Timestamp("2023-01-01")
 RANDOM_STATE = 42
 DEFAULT_PREDICTION_MODEL_PATH = Path("random_forest_augmented_without_odds.pkl")
 
+# Potvrđene kolizije imena kod kojih isto tekstualno ime pripada razlicitim
+# osobama. Kategorija sluzi za razrjesavanje identiteta, ne za automatski
+# dohvat stare verzije borca koji je tijekom karijere promijenio kategoriju.
+AMBIGUOUS_FIGHTER_NAMES = {
+    "bruno silva": ("Flyweight", "Middleweight"),
+}
+
 FEATURE_COLS = [
     "lose_streak_dif",
     "win_streak_dif",
@@ -849,6 +856,19 @@ def find_latest_fighter_profile(source_df: pd.DataFrame, fighter_name: str, weig
 
     # NOVO: filtar po kategoriji + upozorenje na moguću koliziju imena
 
+    ambiguous_classes = AMBIGUOUS_FIGHTER_NAMES.get(fighter_key)
+    if ambiguous_classes is not None and weight_class is None:
+        raise ValueError(
+            f"Postoji vise razlicitih boraca imena '{fighter_name}'. "
+            f"Za odabir osobe navedi kategoriju: {', '.join(ambiguous_classes)}."
+        )
+
+    if ambiguous_classes is not None and weight_class not in ambiguous_classes:
+        raise ValueError(
+            f"Neispravna kategorija za razrjesavanje imena '{fighter_name}': "
+            f"{weight_class}. Dostupno: {', '.join(ambiguous_classes)}."
+        )
+
     if weight_class is not None:
         fighter_rows = fighter_rows.loc[fighter_rows["weight_class"] == weight_class]
         if fighter_rows.empty:
@@ -858,11 +878,12 @@ def find_latest_fighter_profile(source_df: pd.DataFrame, fighter_name: str, weig
     else:
         classes = sorted(fighter_rows["weight_class"].dropna().unique())
         if warn and len(classes) > 1:
+            latest_class = fighter_rows.sort_values("date").iloc[-1]["weight_class"]
             print(
-                f"UPOZORENJE: ime '{fighter_name}' pojavljuje se u vise kategorija "
-                f"({', '.join(classes)}). Moguce je da se radi o razlicitim osobama "
-                f"istog imena; profil se uzima iz najnovije borbe. Za jednoznacan "
-                f"odabir proslijedi weight_class."
+                f"INFO: {fighter_name} nastupao je u vise kategorija "
+                f"({', '.join(classes)}). Koristi se profil iz njegove najnovije "
+                f"borbe ({latest_class}); ne radi se automatski povratak na stari "
+                f"profil iz ranije kategorije."
             )
 
     latest_row = fighter_rows.sort_values("date").iloc[-1]
@@ -899,13 +920,21 @@ def get_latest_profiles_by_weight_class(source_df: pd.DataFrame) -> pd.DataFrame
     profiles = []
 
     for name in names:
-        try:
-            # warn=False: kod masovnog nabrajanja ne zelimo stotine upozorenja
-            # o borcima koji su mijenjali kategoriju.
-            profile = find_latest_fighter_profile(source_df, str(name), warn=False)
-        except ValueError:
-            continue
-        profiles.append(profile)
+        fighter_key = str(name).casefold().strip()
+        selectors = AMBIGUOUS_FIGHTER_NAMES.get(fighter_key, (None,))
+        for weight_class in selectors:
+            try:
+                # warn=False: kod masovnog nabrajanja ne zelimo stotine poruka
+                # o borcima koji su mijenjali kategoriju.
+                profile = find_latest_fighter_profile(
+                    source_df,
+                    str(name),
+                    weight_class=weight_class,
+                    warn=False,
+                )
+            except ValueError:
+                continue
+            profiles.append(profile)
 
     profiles_df = pd.DataFrame(profiles)
     if profiles_df.empty:
@@ -940,6 +969,7 @@ def predict_fight(
     fighter_a: str,
     fighter_b: str,
     model_path: Path | str = DEFAULT_PREDICTION_MODEL_PATH,
+    weight_class: str | None = None,
     enforce_same_weight_class: bool = True,
     neutralize_corner: bool = True,
 ) -> dict:
@@ -954,8 +984,35 @@ def predict_fight(
     """
     source_df = pd.read_csv(DATA_PATH)
 
-    fighter_a_profile = find_latest_fighter_profile(source_df, fighter_a)
-    fighter_b_profile = find_latest_fighter_profile(source_df, fighter_b)
+    fighter_a_key = fighter_a.casefold().strip()
+    fighter_b_key = fighter_b.casefold().strip()
+    fighter_a_profile = find_latest_fighter_profile(
+        source_df,
+        fighter_a,
+        weight_class=(weight_class if fighter_a_key in AMBIGUOUS_FIGHTER_NAMES else None),
+    )
+    fighter_b_profile = find_latest_fighter_profile(
+        source_df,
+        fighter_b,
+        weight_class=(weight_class if fighter_b_key in AMBIGUOUS_FIGHTER_NAMES else None),
+    )
+
+    if weight_class is not None:
+        wrong_class = [
+            profile
+            for profile in (fighter_a_profile, fighter_b_profile)
+            if profile["weight_class"] != weight_class
+        ]
+        if wrong_class:
+            details = ", ".join(
+                f"{profile['fighter_name']} = {profile['weight_class']}"
+                for profile in wrong_class
+            )
+            raise ValueError(
+                f"Zadana kategorija borbe je {weight_class}, ali najnoviji "
+                f"profil nije u toj kategoriji: {details}. Stari profil se ne "
+                f"odabire automatski."
+            )
 
     if (
         enforce_same_weight_class
@@ -1071,6 +1128,7 @@ def recommend_matchups(
     fighter_name: str,
     top_n: int = 10,
     model_path: Path | str = DEFAULT_PREDICTION_MODEL_PATH,
+    weight_class: str | None = None,
     active_since: str | pd.Timestamp | None = SPLIT_DATE,
     include_unranked: bool = False,
 ) -> pd.DataFrame:
@@ -1092,7 +1150,19 @@ def recommend_matchups(
     i granica za "aktivne" borce u recommenderu.
     """
     source_df = pd.read_csv(DATA_PATH)
-    fighter_profile = find_latest_fighter_profile(source_df, fighter_name)
+    fighter_key = fighter_name.casefold().strip()
+    fighter_profile = find_latest_fighter_profile(
+        source_df,
+        fighter_name,
+        weight_class=(weight_class if fighter_key in AMBIGUOUS_FIGHTER_NAMES else None),
+    )
+
+    if weight_class is not None and fighter_profile["weight_class"] != weight_class:
+        raise ValueError(
+            f"Zadana kategorija je {weight_class}, ali najnoviji profil borca "
+            f"{fighter_profile['fighter_name']} je {fighter_profile['weight_class']}. "
+            f"Stari profil se ne odabire automatski."
+        )
 
     model_path = Path(model_path)
     if not model_path.exists():
@@ -1409,7 +1479,7 @@ def analyze_results(model_path: Path | str = DEFAULT_PREDICTION_MODEL_PATH) -> N
         ax.legend()
     ax.set_ylabel("ROC-AUC")
     ax.set_ylim(0, 0.85)
-    ax.set_title(f"ROC-AUC na istom odds-podskupu (n={n_odds}): model dostize, ne nadmasuje trziste")
+    ax.set_title(f"ROC-AUC na istom odds-podskupu (n={n_odds}): model dostiže, ne nadmašuje tržište")
     fig.tight_layout()
     path2 = FIGURES_DIR / "fig2_roc_auc_vs_market.png"
     fig.savefig(path2, dpi=150)
@@ -1438,8 +1508,8 @@ def analyze_results(model_path: Path | str = DEFAULT_PREDICTION_MODEL_PATH) -> N
             va="center",
             fontsize=8,
         )
-    ax.set_xlabel("Vaznost (Gini importance)")
-    ax.set_title("Vaznost znacajki — Random Forest, Model A2 (bez odds)")
+    ax.set_xlabel("Važnost (Gini importance)")
+    ax.set_title("Važnost znacajki — Random Forest, Model A2 (bez odds)")
     fig.tight_layout()
     path3 = FIGURES_DIR / "fig3_feature_importance.png"
     fig.savefig(path3, dpi=150)
@@ -1461,7 +1531,7 @@ def analyze_results(model_path: Path | str = DEFAULT_PREDICTION_MODEL_PATH) -> N
     class_labels = ["Blue (0)", "Red (1)"]
     ax.set_xticks([0, 1], labels=class_labels)
     ax.set_yticks([0, 1], labels=class_labels)
-    ax.set_xlabel("Predvidjeno")
+    ax.set_xlabel("Predviđeno")
     ax.set_ylabel("Stvarno")
     ax.set_title("Confusion matrix — Random Forest, Model A2 (test)")
     threshold = cm.max() / 2
@@ -1490,7 +1560,7 @@ def analyze_results(model_path: Path | str = DEFAULT_PREDICTION_MODEL_PATH) -> N
     source_df = pd.read_csv(DATA_PATH)
     scores = compute_competitiveness_distribution(source_df, model, active_since=SPLIT_DATE)
     if scores.empty:
-        print("Fig 5 preskocen: nema dovoljno aktivnih profila za parove.")
+        print("Fig 5 preskočen: nema dovoljno aktivnih profila za parove.")
     else:
         fig, ax = plt.subplots(figsize=(9, 5))
         ax.hist(scores, bins=25, color="#55A868", edgecolor="white")
@@ -1502,8 +1572,8 @@ def analyze_results(model_path: Path | str = DEFAULT_PREDICTION_MODEL_PATH) -> N
             linewidth=1.5,
             label=f"Prosjek = {mean_score:.3f}",
         )
-        ax.set_xlabel("Competitiveness score  (1.00 = 50/50, 0.00 = jednostrano)")
-        ax.set_ylabel("Broj mogucih matchupova")
+        ax.set_xlabel("Ocjena kompetitivnosti  (1.00 = 50/50, 0.00 = jednostrano)")
+        ax.set_ylabel("Broj mogućih matchupova")
         ax.set_title(
             f"Distribucija kompetitivnosti rangiranih parova u kategoriji "
             f"(n={len(scores)} parova)"
@@ -1557,7 +1627,7 @@ def analyze_results(model_path: Path | str = DEFAULT_PREDICTION_MODEL_PATH) -> N
             fontsize=7,
             color="gray",
         )
-    ax.set_xlabel("Predvidjena vjerojatnost (Red pobjeda)")
+    ax.set_xlabel("Predviđena vjerojatnost (Red pobjeda)")
     ax.set_ylabel("Stvarna stopa Red pobjeda")
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
@@ -1680,6 +1750,14 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--weight-class",
+        help=(
+            "Tezinska kategorija za --predict ili --recommend. Obavezna je za "
+            "potvrdjene kolizije imena (npr. Bruno Silva); za ostale borce "
+            "provjerava najnoviji profil i ne dohvaca automatski stari profil."
+        ),
+    )
+    parser.add_argument(
         "--allow-different-weight-class",
         action="store_true",
         help="Dopusti predikciju i ako borci nemaju istu zadnju poznatu kategoriju.",
@@ -1735,6 +1813,7 @@ def main() -> None:
             fighter_a,
             fighter_b,
             model_path=args.model,
+            weight_class=args.weight_class,
             enforce_same_weight_class=not args.allow_different_weight_class,
             neutralize_corner=not args.respect_corners,
         )
@@ -1745,6 +1824,7 @@ def main() -> None:
             args.recommend,
             top_n=args.top,
             model_path=args.model,
+            weight_class=args.weight_class,
             active_since=None if args.include_inactive else args.active_since,
             include_unranked=args.include_unranked,
         )
